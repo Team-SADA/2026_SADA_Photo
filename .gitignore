@@ -1,0 +1,13 @@
+# Python virtual environment
+__pycache__/
+*.pyc
+
+/obamify2
+
+# Rust build artifacts
+target/
+Cargo.lock
+
+# Dynamically generated media/images
+SOURCE/
+GIF/
