@@ -5,14 +5,31 @@
 /.pnp
 .pnp.js
 
+# local IDE settings
+.idea/
+
 # testing
 /coverage
 
 # production
 /build
+target/
+target-background/
+
+# Python cache
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Runtime uploads and generated photos
+Backend/images/
 
 # misc
 .DS_Store
+.env
+.env.*
+!.env.example
 .env.local
 .env.development.local
 .env.test.local

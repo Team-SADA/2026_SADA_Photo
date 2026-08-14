@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>이미지 모핑 (Image Morphing)</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>✨ 이미지 모핑 웹앱</h1>
+    <p class="subtitle">두 얼굴/사진 사이를 자연스럽게 변형시키는 Delaunay 삼각분할 기반 모핑 데모</p>
+  </header>
+
+  <main>
+    <!-- STEP 1 : UPLOAD -->
+    <section class="panel" id="panel-upload">
+      <h2><span class="step">1</span> 이미지 업로드</h2>
+      <div class="upload-grid">
+        <div class="upload-slot">
+          <label class="dropzone" id="drop-a">
+            <input type="file" id="file-a" accept="image/*" hidden />
+            <span class="dz-label">이미지 A 선택</span>
+            <img id="preview-a" class="dz-preview" hidden />
+          </label>
+        </div>
+        <div class="upload-slot">
+          <label class="dropzone" id="drop-b">
+            <input type="file" id="file-b" accept="image/*" hidden />
+            <span class="dz-label">이미지 B 선택</span>
+            <img id="preview-b" class="dz-preview" hidden />
+          </label>
+        </div>
+      </div>
+    </section>
+
+    <!-- STEP 2 : POINT EDITOR -->
+    <section class="panel" id="panel-editor" hidden>
+      <h2><span class="step">2</span> 대응점(Correspondence Points) 지정</h2>
+      <p class="hint">
+        왼쪽 사진에서 특징점을 클릭한 뒤, 오른쪽 사진의 같은 위치를 클릭하면 한 쌍이 완성돼요.
+        점을 드래그해서 위치를 옮기거나, 점을 우클릭하면 삭제됩니다. 모서리 8개 점은 자동으로 추가돼요.
+      </p>
+      <div class="toolbar">
+        <button id="btn-undo">↩ 마지막 점 취소</button>
+        <button id="btn-clear">🗑 전체 초기화</button>
+        <button id="btn-reset-corners">⛶ 모서리점 재생성</button>
+        <span class="point-count">쌍(pair) 개수: <strong id="pair-count">0</strong></span>
+      </div>
+      <div class="editor-grid">
+        <canvas id="canvas-a"></canvas>
+        <canvas id="canvas-b"></canvas>
+      </div>
+    </section>
+
+    <!-- STEP 3 : SETTINGS + GENERATE -->
+    <section class="panel" id="panel-settings" hidden>
+      <h2><span class="step">3</span> 모핑 설정</h2>
+      <div class="settings-grid">
+        <label>
+          프레임 수
+          <input type="range" id="opt-frames" min="8" max="90" value="30" />
+          <span id="opt-frames-val">30</span>
+        </label>
+        <label>
+          재생 속도 (FPS)
+          <input type="range" id="opt-fps" min="5" max="30" value="15" />
+          <span id="opt-fps-val">15</span>
+        </label>
+        <label class="checkbox-row">
+          <input type="checkbox" id="opt-easing" checked />
+          자연스러운 가속/감속 (ease in-out)
+        </label>
+        <label class="checkbox-row">
+          <input type="checkbox" id="opt-mesh" />
+          삼각망(Triangulation) 보기
+        </label>
+      </div>
+      <button id="btn-generate" class="primary-btn">🎬 모핑 생성하기</button>
+      <div id="progress-wrap" hidden>
+        <div class="progress-bar"><div id="progress-fill"></div></div>
+        <span id="progress-text">0%</span>
+      </div>
+    </section>
+
+    <!-- STEP 4 : PREVIEW + EXPORT -->
+    <section class="panel" id="panel-preview" hidden>
+      <h2><span class="step">4</span> 미리보기 &amp; 내보내기</h2>
+      <div class="preview-wrap">
+        <canvas id="canvas-result"></canvas>
+      </div>
+      <div class="playback-controls">
+        <button id="btn-play">▶ 재생</button>
+        <input type="range" id="scrub" min="0" max="100" value="0" />
+        <span id="frame-indicator">0 / 0</span>
+      </div>
+      <div class="export-row">
+        <button id="btn-export-frame">🖼 현재 프레임 PNG 저장</button>
+        <button id="btn-export-video">🎥 WebM 동영상으로 내보내기</button>
+        <span id="export-status"></span>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>Feature-based image morphing · Delaunay triangulation · affine warp · cross-dissolve — 전부 브라우저에서 실행됩니다 (서버 업로드 없음).</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
