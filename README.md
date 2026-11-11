@@ -1,86 +1,63 @@
-# 📸 사다네컷 × Obamify 자동화 프로젝트
+# 2026 사다네컷 포토부스
 
-사다네컷(SADA) 부스에서 대기 중인 사용자의 얼굴(Source)과 합성 대상(Target) 이미지 2장을 활용하여 실시간으로 오바미파이(Obamify) 물리 연산 기반의 모핑 GIF 애니메이션을 자동 생성해 주는 서비스 파이프라인 프로젝트입니다.
+카메라로 촬영한 사진을 골라 사다네컷 인화용 이미지와 GIF를 만드는 Windows 포토부스입니다. 촬영 화면에서 Obamify 또는 Image Morphing을 선택할 수 있으며, 완성된 사진을 부스 프린터로 출력하거나 SADA 서비스로 전송할 수 있습니다.
 
-부스의 높은 순환율(회전율)을 극대화하기 위해 다방면의 성능 튜닝 및 라이프사이클 최적화를 적용했습니다.
+## 프로그램 구성
 
----
+| 경로 | 역할 |
+| --- | --- |
+| [`src/`](src/) | React·TypeScript 부스 화면. 카메라 촬영, 사진 선택, 결과 미리보기, 출력 및 전송을 담당합니다. |
+| [`public/images/`](public/images/) | 인화용 프레임과 알고리즘 미리보기 이미지입니다. |
+| [`Backend/app.py`](Backend/app.py) | Flask API. 사진과 GIF 저장, Obamify 실행, 모핑 GIF 인코딩, Windows 프린터 출력, SADA 전송을 처리합니다. |
+| [`obamify/`](obamify/) | Rust·wgpu 기반 이미지 변환 프로그램입니다. Flask가 실행 파일을 `--auto`로 시작하면 이미지를 가져와 변환하고, 완성된 GIF를 Flask에 돌려줍니다. |
+| [`morphing/`](morphing/) | 별도로 열어볼 수 있는 이미지 모핑 데모입니다. 부스의 모핑 경로는 React 화면에서 중간 프레임을 만들고 Flask에서 GIF로 인코딩합니다. |
 
-## 🏗️ 시스템 아키텍처
+## Windows에서 실행하기
 
-```mermaid
-sequenceDiagram
-    participant Web as Web UI (index.html)
-    participant Flask as Flask Server (app.py)
-    participant Rust as Obamify CLI (obamify.exe)
+Node.js와 npm, Python, Rust 도구가 필요합니다. 촬영에는 카메라가 필요하며, 실물 인화에는 Windows에 등록된 프린터가 필요합니다.
 
-    Web->>Flask: 1. 이미지 2장 + 사용자 ID 업로드 (POST /upload_images)
-    Flask->>Flask: 2. 이미지 로컬 저장 & 대기열 등록
-    Flask->>Rust: 3. 백그라운드 프로세스 실행 (obamify.exe --auto)
-    Rust->>Flask: 4. 대기 작업 메타데이터 조회 (GET /api/pending_job)
-    Rust->>Rust: 5. 파티클 모핑 물리 연산 수행 (Max Velocity & Fast Converge)
-    Rust->>Rust: 6. 시뮬레이션 프레임 GIF 캡처 & 인코딩 (NeuQuant 가속)
-    Rust->>Flask: 7. 완성된 사용자ID.gif 업로드 (POST /upload_gif)
-    Rust->>Rust: 8. GPU 자원 릴리즈 후 자진 종료 (exit)
-    Flask->>Web: 9. 갤러리 리스트 갱신 (사용자ID.gif 렌더링)
+저장소 루트에서 의존성을 설치합니다.
+
+```powershell
+npm.cmd ci
+py -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r Backend/requirements.txt
 ```
 
----
+Obamify를 사용할 경우 Rust 프로그램을 먼저 빌드합니다. Flask는 `obamify/target/release/obamify.exe`를 우선 찾습니다.
 
-## ⚡ 순환율 극대화 성능 최적화 가이드라인
-
-부스 참가자 대기시간을 대폭 감소시키기 위해 적용된 핵심 최적화 설정입니다:
-
-1. **GPU/WGPU 디바이스 생명주기 관리**:
-   - `eframe`의 고유 제약인 프로세스당 단일 GPU 컨텍스트 생성 한계를 우회하기 위해, 매번 띄우는 프로세스 단발성(`--auto` 단일 처리 후 `std::process::exit(0)`) 구동 구조를 정립하였습니다.
-   - 변환이 끝나면 GPU 리소스를 OS 수준에서 완벽하게 해제하므로 그래픽 오류나 먹통 현상이 발생하지 않습니다.
-2. **GIF 크기 및 프레임 최적화**:
-   - **해상도 축소**: GIF 해상도를 기존 $400 \times 400$에서 $300 \times 300$으로 축소하여 총 연산 화소 수를 44% 이상 감소시켰습니다.
-   - **프레임 다이어트**: 변환 프레임 수를 최소 `40` ~ 최대 `50`프레임으로 축소하여 디코딩/인코딩 병목을 단축했습니다.
-3. **NeuQuant 색상 양자화 속도 가속**:
-   - 뉴퀀트 팔레트 샘플링 팩터(`GIF_PALETTE_SAMPLEFAC`)를 `1`에서 `10`으로 높여 색상 분석 시간을 약 10배 가속하였습니다.
-4. **물리 물리 시뮬레이션 가속화**:
-   - 파티클의 최대 이동 속도(`MAX_VELOCITY`)를 `6.0`에서 `24.0`으로 4배 향상했습니다.
-   - 파티클 반발 거리 간격(`PERSONAL_SPACE`)을 `0.95`에서 `0.6`으로 압축하여 타겟 이미지로 빠르게 안착시켰습니다.
-   - GPU 렌더 프레임당 업데이트 스텝을 2배(`120 / GIF_FRAMERATE`)로 늘려 실제 전체 시퀀스 진행 시간을 기존 **40초대에서 10초 내외로 단축**했습니다.
-
----
-
-## ⚙️ 설치 및 빌드 방법
-
-### 1. Flask 백엔드 의존성 설치
-`.venv` 가상환경이 구축된 상태에서 아래 패키지들을 설치합니다.
 ```powershell
-cd .venv/Scripts
-# 가상환경 활성화
-.\Activate.ps1
-# 필수 패키지 설치
-pip install Flask requests
-```
-
-### 2. Rust CLI (obamify) 빌드
-그래픽 디바이스 연산 가속을 위해 반드시 **릴리즈 모드**로 빌드해 주어야 합니다.
-```powershell
-cd obamify
+Push-Location obamify
 cargo build --release
+Pop-Location
 ```
-*빌드가 정상 완료되면 `obamify/target/release/obamify.exe` 파일이 생성됩니다.*
 
----
+첫 번째 터미널에서 Flask를 실행합니다.
 
-## 🚀 실행 및 사용 방법
+```powershell
+.\.venv\Scripts\python.exe Backend/app.py
+```
 
-1. **Flask 백엔드 서버 구동**:
-   ```powershell
-   cd .venv/Scripts
-   python app.py
-   ```
-   * Flask 웹 서비스가 `http://127.0.0.1:5000` 포트에서 대기합니다.
-   * `app.py`는 사용자가 업로드할 때마다 빌드된 `obamify/target/release/obamify.exe`를 감지하여 자동으로 서브프로세스로 기동시킵니다. 따라서 별도로 Rust 프로그램을 수동으로 띄워놓을 필요가 없습니다.
+두 번째 터미널에서 React 개발 서버를 실행한 뒤 `http://localhost:3000`을 엽니다. React 개발 서버는 API 요청을 `http://127.0.0.1:5000`의 Flask로 전달합니다.
 
-2. **웹 화면 접속**:
-   * 크롬이나 웨일 브라우저로 `http://localhost:5000`에 접속합니다.
-   * **사용자 ID (User ID)**를 적습니다. (예: `happy_booth`)
-   * **원본(Source) 이미지**와 **대상(Target) 이미지** 2장을 각각 드래그 앤 드롭하여 업로드합니다.
-   * **"서버로 업로드"** 버튼을 클릭합니다.
-   * 잠시 후(약 10초) 화면 하단 갤러리에 `happy_booth.gif`가 실시간으로 로드됩니다!
+```powershell
+npm.cmd start
+```
+
+프런트엔드 정적 빌드는 `npm.cmd run build`로 `build/`에 생성됩니다. 정적 빌드를 서비스할 때는 같은 출처에서 Flask API 경로를 제공해야 합니다.
+
+## 부스 설정과 저장 위치
+
+| 환경 변수 | 용도 |
+| --- | --- |
+| `SELPHY_PRINTER_NAME` | Windows에 등록된 프린터 이름입니다. 기본값은 `Canon SELPHY CP1500`입니다. |
+| `SADANECUT_BOOTH_KEY` | SADA 서비스로 사진과 GIF를 전송할 때 사용하는 키입니다. 전송 기능을 사용할 경우 Flask를 시작하는 터미널에 설정합니다. |
+
+원본 사진, 생성 이미지와 GIF, 작업 로그는 `Backend/images/` 아래 작업별 폴더에 저장됩니다. 이 폴더와 `.venv/`는 Git에서 제외됩니다.
+
+## 부스 확인 항목
+
+1. 브라우저에서 카메라를 허용하고 촬영한 뒤, 인화 틀에 넣을 사진을 선택합니다.
+2. Image Morphing과 Obamify를 각각 선택해 결과 미리보기와 GIF가 표시되는지 확인합니다.
+3. 프린터가 연결된 부스에서 인화 매수를 1장으로 선택하고, 실제 출력물의 방향과 잘림을 확인합니다.
+4. SADA 전송을 사용하는 부스에서는 테스트용 6자리 코드로 사진과 GIF가 도착하는지 확인합니다.
