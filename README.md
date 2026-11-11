@@ -12,6 +12,37 @@
 | [`obamify/`](obamify/) | Rust·wgpu 기반 이미지 변환 프로그램입니다. Flask가 실행 파일을 `--auto`로 시작하면 이미지를 가져와 변환하고, 완성된 GIF를 Flask에 돌려줍니다. |
 | [`morphing/`](morphing/) | 별도로 열어볼 수 있는 이미지 모핑 데모입니다. 부스의 모핑 경로는 React 화면에서 중간 프레임을 만들고 Flask에서 GIF로 인코딩합니다. |
 
+## 시스템 구조와 구동 원리
+
+```mermaid
+flowchart LR
+    Camera["카메라"] --> React["React 부스 화면"]
+    React <-->|"이미지·GIF·출력 요청"| Flask["Flask API"]
+    Flask <-->|"변환 작업·완성 GIF"| Rust["Rust Obamify"]
+    Flask --> Disk["Backend/images/ 작업 폴더"]
+    Flask --> Printer["Windows 프린터"]
+    Flask --> SADA["SADA 서비스"]
+```
+
+### 프런트엔드 · 촬영에서 미리보기까지
+
+React가 브라우저 카메라 권한을 요청하고 최대 8장을 촬영합니다. 사용자는 인화 틀에 넣을 원본 4장과 변환에 사용할 사진을 선택합니다. 브라우저의 Canvas가 원본 사진, 변환 프레임, 부스용 틀을 한 장의 인화용 JPEG로 합칩니다. 결과 화면에서 미리보기를 확인하고 인화 매수나 SADA 전송 정보를 입력합니다.
+
+### 두 가지 이미지 변환 방식
+
+| 방식 | 처리 흐름 |
+| --- | --- |
+| **Image Morphing** | 부스 화면의 Canvas가 두 사진의 투명도를 단계적으로 바꿔 24장의 전환 프레임을 만듭니다. React가 프레임을 `POST /api/create_morph_gif`로 보내면 Flask가 Pillow로 GIF를 인코딩하고 결과 주소를 반환합니다. |
+| **Obamify** | React가 사진 두 장을 `POST /upload_images`로 보냅니다. Flask는 사진을 저장하고 `obamify.exe --auto`를 실행합니다. Rust 프로그램은 `GET /api/pending_job`에서 작업을 가져와 GPU에서 파티클을 움직이는 방식으로 이미지를 변환합니다. 완성한 GIF를 `POST /upload_gif`로 돌려준 뒤 종료합니다. Flask가 GIF에서 대표 프레임을 추출하고, React는 결과 주소를 주기적으로 확인해 미리보기를 표시합니다. |
+
+Flask는 Obamify의 대기 작업을 메모리의 `current_job` 한 건으로 관리합니다. 부스에서는 한 번에 한 건씩 진행합니다. [`Backend/templates/index.html`](Backend/templates/index.html)에는 초기 Obamify 업로드·갤러리 화면이 남아 있습니다. 현재 Flask의 `/`는 상태 JSON을 반환하며, 부스 화면은 React 서버에서 엽니다.
+
+### 백엔드 · 저장, 인화, SADA 전송
+
+1. **저장.** Flask는 전달받은 원본과 결과물, 처리 기록을 작업별 폴더에 저장합니다. 작업 기록은 각 폴더의 `events.jsonl`에 남습니다.
+2. **인화.** React는 합성한 JPEG와 매수를 `POST /api/print`로 보냅니다. Flask는 지정된 Windows 프린터에 매수만큼 출력 작업을 제출합니다. 0장이면 출력 작업을 건너뜁니다.
+3. **SADA 전송.** React는 입력받은 식별자와 결과 JPEG, 준비된 GIF를 `POST /api/send_sadanecut_file`로 보냅니다. Flask가 부스 키를 붙여 SADA 서비스로 전달합니다.
+
 ## Windows에서 실행하기
 
 Node.js와 npm, Python, Rust 도구가 필요합니다. 촬영에는 카메라가 필요하며, 실물 인화에는 Windows에 등록된 프린터가 필요합니다.
